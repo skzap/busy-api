@@ -3,6 +3,7 @@ const express = require('express');
 const SocketServer = require('ws').Server;
 const { Client } = require('busyjs');
 const redis = require('./helpers/redis');
+const elastic = require('./helpers/elasticsearch');
 const utils = require('./helpers/utils');
 
 const port = process.env.PORT || 4000;
@@ -66,6 +67,20 @@ wss.on('connection', (ws) => {
 
 /** Stream the blockchain for notifications */
 
+const isDtube = (params) => {
+  let json = null;
+  try {
+    json = JSON.parse(params.json_metadata);
+  } catch (err) {
+    //console.log('Wrong json format on comment json_metadata', err);
+  }
+
+  if (json && json.video && json.video.info && json.video.content)
+    return json.video;
+
+  return false;
+}
+
 const getNotifications = (ops) => {
   const notifications = [];
   ops.forEach((op) => {
@@ -74,6 +89,8 @@ const getNotifications = (ops) => {
     switch (type) {
       case 'comment': {
         const isRootPost = !params.parent_author;
+        const video = isDtube(params)
+        delete video._id
 
         /** Find replies */
         if (!isRootPost) {
@@ -86,6 +103,17 @@ const getNotifications = (ops) => {
             block: op.block,
           };
           notifications.push([params.parent_author, notification]);
+        } else if (video) {
+          elastic.index({
+            index: 'dtube',
+            type: 'video',
+            id: video.info.author+'/'+video.info.permlink,
+            body: video
+          }).then((response) => {
+            console.log(response.result+' '+response._id)
+          }).catch(err => {
+            console.error('Elastic index failed', err);
+          });
         }
 
         /** Find mentions */
