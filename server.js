@@ -2,11 +2,8 @@ const _ = require('lodash');
 const express = require('express');
 const SocketServer = require('ws').Server;
 const { Client } = require('busyjs');
-const sdk = require('sc2-sdk');
 const redis = require('./helpers/redis');
 const utils = require('./helpers/utils');
-
-const sc2 = sdk.Initialize({ app: 'busy.app' });
 
 const port = process.env.PORT || 4000;
 const server = express().listen(port, () => console.log(`Listening on ${port}`));
@@ -42,7 +39,7 @@ wss.on('connection', (ws) => {
     } catch (e) {
       console.error('Error WS parse JSON message', message, e);
     }
-    // const key = new Buffer(JSON.stringify([call.method, call.params])).toString('base64');
+
     if (call.method === 'get_notifications' && call.params && call.params[0]) {
       redis.lrangeAsync(`notifications:${call.params[0]}`, 0, -1).then((res) => {
         console.log('Send notifications', call.params[0], res.length);
@@ -51,30 +48,9 @@ wss.on('connection', (ws) => {
       }).catch(err => {
         console.log('Redis get_notifications failed', err);
       });
-    // } else if (useCache && cache[key]) {
-    //  ws.send(JSON.stringify({ id: call.id, cache: true, result: cache[key] }));
-    } else if (call.method === 'login' && call.params && call.params[0]) {
-      sc2.setAccessToken(call.params[0]);
-      sc2.me().then(result => {
-        console.log('Login success', result.name);
-        ws.name = result.name;
-        ws.account = result.account;
-        ws.user_metadata = result.user_metadata;
-        ws.send(JSON.stringify({ id: call.id, result: { login: true, username: result.name } }));
-      }).catch(err => {
-        console.error('Login failed', err);
-        ws.send(JSON.stringify({
-          id: call.id,
-          result: {},
-          error: 'Something is wrong',
-        }));
-      });
     } else if (call.method && call.params) {
       client.call(call.method, call.params, (err, result) => {
         ws.send(JSON.stringify({ id: call.id, result }));
-        // if (useCache) {
-        //  cache[key] = result;
-        // }
       });
     } else {
       ws.send(JSON.stringify({
