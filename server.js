@@ -18,6 +18,13 @@ const useCache =  false;
 
 const limit = 100;
 
+const options = {
+  saveElastic = true,
+  saveRedis= true,
+}
+if (!process.env.REDISCLOUD_URL) saveRedis=false;
+if (!process.env.ELASTICHOST) saveElastic=false;
+
 const clearGC = () => {
   try {
     global.gc();
@@ -104,16 +111,18 @@ const getNotifications = (ops) => {
           };
           notifications.push([params.parent_author, notification]);
         } else if (video) {
-          elastic.index({
-            index: 'dtube',
-            type: 'video',
-            id: video.info.author+'/'+video.info.permlink,
-            body: video
-          }).then((response) => {
-            console.log(response.result+' '+response._id)
-          }).catch(err => {
-            console.error('Elastic index failed', err);
-          });
+          if (options.saveElastic) {
+            elastic.index({
+              index: 'dtube',
+              type: 'video',
+              id: video.info.author+'/'+video.info.permlink,
+              body: video
+            }).then((response) => {
+              console.log(response.result+' '+response._id)
+            }).catch(err => {
+              console.error('Elastic index failed', err);
+            });
+          }
         }
 
         /** Find mentions */
@@ -251,34 +260,36 @@ const loadBlock = (blockNum) => {
       });
     } else {
       const notifications = getNotifications(ops);
-      /** Create redis operations array */
-      const redisOps = [];
-      notifications.forEach((notification) => {
-        redisOps.push(['lpush', `notifications:${notification[0]}`, JSON.stringify(notification[1])]);
-        redisOps.push(['ltrim', `notifications:${notification[0]}`, 0, limit - 1]);
-      });
-      redisOps.push(['set', 'last_block_num', blockNum]);
-      redis.multi(redisOps).execAsync().then(() => {
-        console.log('Block loaded', blockNum, 'notification stored', notifications.length);
-
-        /** Send push notification for logged peers */
+      if (options.saveRedis) {
+        /** Create redis operations array */
+        const redisOps = [];
         notifications.forEach((notification) => {
-          wss.clients.forEach((client) => {
-            if (client.name && client.name === notification[0]) {
-              console.log('Send push notification', notification[0]);
-              client.send(JSON.stringify({
-                type: 'notification',
-                notification: notification[1]
-              }));
-            }
-          });
+          redisOps.push(['lpush', `notifications:${notification[0]}`, JSON.stringify(notification[1])]);
+          redisOps.push(['ltrim', `notifications:${notification[0]}`, 0, limit - 1]);
         });
+        redisOps.push(['set', 'last_block_num', blockNum]);
+        redis.multi(redisOps).execAsync().then(() => {
+          console.log('Block loaded', blockNum, 'notification stored', notifications.length);
 
-        loadNextBlock();
-      }).catch(err => {
-        console.error('Redis store notification multi failed', err);
-        loadBlock(blockNum);
-      });
+          /** Send push notification for logged peers */
+          notifications.forEach((notification) => {
+            wss.clients.forEach((client) => {
+              if (client.name && client.name === notification[0]) {
+                console.log('Send push notification', notification[0]);
+                client.send(JSON.stringify({
+                  type: 'notification',
+                  notification: notification[1]
+                }));
+              }
+            });
+          });
+
+          loadNextBlock();
+        }).catch(err => {
+          console.error('Redis store notification multi failed', err);
+          loadBlock(blockNum);
+        });
+      }
     }
   }).catch(err => {
     console.error('Call failed with lightrpc (getOpsInBlock)', err);
