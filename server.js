@@ -1,3 +1,9 @@
+let options = {
+  saveElastic: true,
+  saveRedis: process.argv[2],
+}
+if (!process.env.ELASTICHOST) options.saveElastic=false;
+
 const _ = require('lodash');
 const express = require('express');
 const SocketServer = require('ws').Server;
@@ -17,13 +23,6 @@ const cache = {};
 const useCache =  false;
 
 const limit = 100;
-
-const options = {
-  saveElastic = true,
-  saveRedis= true,
-}
-if (!process.env.REDISCLOUD_URL) saveRedis=false;
-if (!process.env.ELASTICHOST) saveElastic=false;
 
 const clearGC = () => {
   try {
