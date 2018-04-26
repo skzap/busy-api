@@ -4,17 +4,19 @@ let options = {
 }
 if (!process.env.ELASTICHOST) options.saveElastic=false;
 
+// redis = for notifications and head block number
+// elastic search = for json_metadata and contents
+// websocket = for serving notifications and ws steem node relay
+
 const _ = require('lodash');
-const express = require('express');
-const SocketServer = require('ws').Server;
+const WebSocket = require('ws');
 const { Client } = require('busyjs');
 const redis = require('./helpers/redis');
 const elastic = require('./helpers/elasticsearch');
 const utils = require('./helpers/utils');
 
 const port = process.env.PORT || 4000;
-const server = express().listen(port, () => console.log(`Listening on ${port}`));
-const wss = new SocketServer({ server });
+const wss = new WebSocket.Server({ port: port });
 
 const steemdWsUrl = process.env.STEEMD_WS_URL || 'wss://rpc.buildteam.io';
 const client = new Client(steemdWsUrl);
