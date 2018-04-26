@@ -42,6 +42,7 @@ function wget(hash) {
 }
 
 function isValidHash(hash) {
+    if (!hash) return false;
     if (!hash.match(/^[a-zA-Z0-9]+$/))
         return false;
     if (hash.length != 46)
