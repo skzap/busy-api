@@ -14,6 +14,7 @@ const { Client } = require('busyjs');
 const redis = require('./helpers/redis');
 const elastic = require('./helpers/elasticsearch');
 const utils = require('./helpers/utils');
+const ipfs = require('./helpers/ipfs');
 
 const port = process.env.PORT || 4000;
 const wss = new WebSocket.Server({ port: port });
@@ -112,6 +113,9 @@ const getNotifications = (ops) => {
           };
           notifications.push([params.parent_author, notification]);
         } else if (video) {
+          ipfs.pin(video.content.video240hash)
+          ipfs.pin(video.content.video480hash)
+          ipfs.pin(video.content.video720hash)
           if (options.saveElastic) {
             elastic.index({
               index: 'dtube',
@@ -329,6 +333,9 @@ const loadNextBlock = () => {
 const start = () => {
   console.info('Start streaming blockchain');
   loadNextBlock();
+  // console.info('Pinning random file')
+  // ipfs.pin('QmawNzu5sFgLndJ6iqaDGyJYU9Xjgvgiq6Hj7UqwfnWjMR')
+  // ipfs.pin('QmX88DJKK94GQE69qcM3YkmTC2DfKHANJWLA94iciwt9qX')
 
   /** Send heartbeat to peers */
   setInterval(() => {
