@@ -233,6 +233,7 @@ const getNotifications = (ops) => {
 };
 
 const loadBlock = (blockNum) => {
+  console.log(blockNum)
   utils.getOpsInBlock(blockNum, false).then(ops => {
     if (!ops.length) {
       console.error('Block does not exit?', blockNum);
@@ -259,41 +260,44 @@ const loadBlock = (blockNum) => {
       });
     } else {
       const notifications = getNotifications(ops);
+      
+      /** Create redis operations array */
+      const redisOps = [];
       if (options.saveRedis) {
-        /** Create redis operations array */
-        const redisOps = [];
         notifications.forEach((notification) => {
           redisOps.push(['lpush', `notifications:${notification[0]}`, JSON.stringify(notification[1])]);
           redisOps.push(['ltrim', `notifications:${notification[0]}`, 0, limit - 1]);
         });
-        redisOps.push(['set', 'last_block_num', blockNum]);
-        redis.multi(redisOps).execAsync().then(() => {
-          console.log('Block loaded', blockNum, 'notification stored', notifications.length);
-
-          /** Send push notification for logged peers */
-          notifications.forEach((notification) => {
-            wss.clients.forEach((client) => {
-              if (client.name && client.name === notification[0]) {
-                console.log('Send push notification', notification[0]);
-                client.send(JSON.stringify({
-                  type: 'notification',
-                  notification: notification[1]
-                }));
-              }
-            });
-          });
-
-          loadNextBlock();
-        }).catch(err => {
-          console.error('Redis store notification multi failed', err);
-          loadBlock(blockNum);
-        });
       }
+      redisOps.push(['set', 'last_block_num', blockNum]);
+      redis.multi(redisOps).execAsync().then(() => {
+        console.log('Block loaded', blockNum, 'notification stored', notifications.length);
+
+        /** Send push notification for logged peers */
+        notifications.forEach((notification) => {
+          wss.clients.forEach((client) => {
+            if (client.name && client.name === notification[0]) {
+              console.log('Send push notification', notification[0]);
+              client.send(JSON.stringify({
+                type: 'notification',
+                notification: notification[1]
+              }));
+            }
+          });
+        });
+
+        loadNextBlock();
+      }).catch(err => {
+        console.error('Redis store notification multi failed', err);
+        loadBlock(blockNum);
+      });
     }
   }).catch(err => {
     console.error('Call failed with lightrpc (getOpsInBlock)', err);
     console.log('Retry', blockNum);
-    loadBlock(blockNum);
+    utils.sleep(2000).then(() => {
+      loadBlock(blockNum);
+    });
   });
 };
 
